@@ -1,3 +1,12 @@
+/*
+To use this script you should:
+- Set the right input file in config
+- Set the right names for the columns
+- Check that the geocoder URL is still valid
+
+This script only works for Berlin!
+*/
+
 'use strict';
 
 const fs = require('fs');
@@ -9,6 +18,7 @@ let config = {
   fileName: 'data/Vollpflege.csv',
   fileOutput: 'data/result.csv',
   streetNameColumn: 'Einrichtung Strasse',
+  streetNumberColumn: '',
   PLZColumn: 'Einrichtung PLZ',
   isSameColumnForStreetAndNumber: true,
   geocoderURL: 'https://tsb.ara.uberspace.de/tsb-geocoding/'
@@ -27,7 +37,7 @@ function readCSVFile (file, delimiter) {
     .pipe(csv({separator: delimiter}))
     .on('data', (data) => results.push(data))
     .on('end', () => {
-      (startProcessing(results));
+      (main(results));
     });
 
 }
@@ -52,27 +62,33 @@ function writeCSVFile (results) {
     });
 }
 
-function startProcessing(data) {
+function main(data) {
 
+  /* Say Hi */
+  console.log(`Starting to process ${data.length} entries.`);
+
+  /* Let's and new separate columns for street names and numbers */
   let processed = processCSV(data);
-  // processed now has additional streetName and streetNumber properties
-
-  console.log(`Starting to process ${processed.length} entries.`);
 
   let axiosArray = [];
 
+  /* Build an Axios call for each entry */
   processed.forEach(el => {
-    axiosArray.push(testAsyncWithAxios(el.streetName, el.streetNumber, el[config.PLZColumn]));
+    axiosArray.push(makeAPICalls(el.streetName, el.streetNumber, el[config.PLZColumn]));
   });
 
+  /* Wait for all Axios calls to resolve*/
   Promise.all(axiosArray)
     .then(results => {
 
+      /* Add lat/lon columns with results from Axios call*/
       processed.forEach((el, i) => {
         el.lat = results[i].lat || '';
         el.lon = results[i].lon || '';
       });
+
       console.log(`Processed ${processed.length} entries. Found ${counter.missed} errors.`);
+      /*Write to disk*/
       writeCSVFile(processed);
     });
 }
@@ -82,15 +98,15 @@ function processCSV(data) {
 
   if (config.isSameColumnForStreetAndNumber) {
     data.forEach(el => {
-      //splits string at first occurence of a digit
+      //Splits string at first occurence of a digit
       let streetArray = el[config.streetNameColumn].split(/(\d+)/);
 
       el.streetName = streetArray[0];
 
-      //remove first Element, keep Array
+      //Remove first Element, keep Array
       streetArray.shift();
 
-      //join and replace whitespace to have a single number
+      //Join and replace whitespace to have a single number
       el.streetNumber = streetArray.join('').replace(/\s/g,'');
 
     });
@@ -99,8 +115,7 @@ function processCSV(data) {
   }
 }
 
-
-async function testAsyncWithAxios (name, number, plz) {
+async function makeAPICalls (name, number, plz) {
 
   let coords = {};
 
@@ -198,4 +213,5 @@ function logInfo() {
   console.log(`Processed ${counter.missed + counter.success} entries`);
 }
 
+//Start reading the file and initiate the process
 readCSVFile(config.fileName, ';');
