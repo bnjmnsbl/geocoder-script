@@ -14,7 +14,7 @@ const csv = require('csv-parser');
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 const axios = require('axios');
 
-let config = {
+const config = {
   fileName: 'data/Vollpflege.csv',
   fileOutput: 'data/result.csv',
   streetNameColumn: 'Einrichtung Strasse',
@@ -24,7 +24,7 @@ let config = {
   geocoderURL: 'https://tsb.ara.uberspace.de/tsb-geocoding/'
 };
 
-let counter = {
+const counter = {
   missed: 0,
   success: 0
 };
@@ -67,7 +67,7 @@ function main(data) {
   /* Say Hi */
   console.log(`Starting to process ${data.length} entries.`);
 
-  /* Let's and new separate columns for street names and numbers */
+  /* Let's add new separate columns for street names and numbers */
   let processed = processCSV(data);
 
   let axiosArray = [];
@@ -81,10 +81,11 @@ function main(data) {
   Promise.all(axiosArray)
     .then(results => {
 
-      /* Add lat/lon columns with results from Axios call*/
+      /* Add lat/lon columns with results from Axios call
+        You might want to switch lat and lon becasue I'm stupid*/
       processed.forEach((el, i) => {
-        el.lat = results[i].lat || '';
-        el.lon = results[i].lon || '';
+        el.lon = results[i].lat || '';
+        el.lat = results[i].lon || '';
       });
 
       console.log(`Processed ${processed.length} entries. Found ${counter.missed} errors.`);
@@ -133,17 +134,7 @@ async function makeAPICalls (name, number, plz) {
     return coords;
   }
 
-  const coordinates = await getCoordinates(numID);
-
-  if (coordinates.data === '') {
-    counter.missed++;
-    return ('No coordinates found for ' + name + ' ' + number);
-  } else {
-    counter.success++;
-    coords.lat = coordinates.data.lat;
-    coords.lon = coordinates.data.lon;
-
-  }
+  coords = await getCoordinates(numID);
 
   logInfo();
   return coords;
@@ -188,10 +179,20 @@ async function getNumID(identifier, number) {
 }
 
 async function getCoordinates(numID) {
+  let result = {};
+  let coordinates = await axios.get(`${config.geocoderURL}geo?num=${numID.id}`);
 
-  let result = axios.get(`${config.geocoderURL}geo?num=${numID.id}`);
-  return result;
 
+  if (coordinates.data === '') {
+    counter.missed++;
+    return result;
+  } else {
+    counter.success++;
+    result.lat = coordinates.data.lat;
+    result.lon = coordinates.data.lon;
+
+    return result;
+  }
 }
 
 function refineNumber(number) {
