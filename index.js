@@ -129,7 +129,8 @@ function main(data) {
       writeCSVFile(processed);
 
       if (config.outputGeoJSON) {
-        writeGeoJSON(processed);
+        //for some reason, this doesn't work yet, use csv2geojson CLI
+        //writeGeoJSON(processed);
       }
     })
     .catch(console.log);
