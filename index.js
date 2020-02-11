@@ -12,11 +12,15 @@ This script only works for Berlin!
 const fs = require('fs');
 const csv = require('csv-parser');
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
+const createCsvStringifier = require('csv-writer').createObjectCsvStringifier;
 const axios = require('axios');
+const csv2geojson = require('csv2geojson');
 
 const config = {
   fileName: 'data/Vollpflege.csv',
   fileOutput: 'data/result.csv',
+  geoJSONOutput: 'data/result.geojson',
+  outputGeoJSON: true,
   streetNameColumn: 'Einrichtung Strasse',
   streetNumberColumn: '',
   PLZColumn: 'Einrichtung PLZ',
@@ -26,7 +30,8 @@ const config = {
 
 const counter = {
   missed: 0,
-  success: 0
+  success: 0,
+  total: 0
 };
 
 function readCSVFile (file, delimiter) {
@@ -58,14 +63,45 @@ function writeCSVFile (results) {
 
   csvWriter.writeRecords(results)
     .then(()=> {
-      console.log('...Done');
+      console.log('...Done writing CSV');
     });
+}
+
+function writeGeoJSON(results) {
+
+  let headerArray = [];
+  let objectProps = Object.getOwnPropertyNames(results[0]);
+
+  objectProps.forEach(el => {
+    headerArray.push({id: el, title: el });
+  });
+  const csvStringifier = createCsvStringifier({
+    header: headerArray
+  });
+  let stringifiedHeader = csvStringifier.getHeaderString();
+  let stringifiedBody = csvStringifier.stringifyRecords(results);
+  let stringifiedCSV = stringifiedHeader + stringifiedBody;
+
+  csv2geojson.csv2geojson(stringifiedCSV, {
+    latfield: 'lat',
+    lonfield: 'lon',
+    delimiter: ','
+  }, function(err, data) {
+    if (err) throw err;
+
+    fs.writeFile(config.geoJSONOutput, data, function(err) {
+      if (err) throw err;
+      console.log('Done writing GeoJSON.');
+    });
+
+  });
 }
 
 function main(data) {
 
   /* Say Hi */
-  console.log(`Starting to process ${data.length} entries.`);
+  counter.total = data.length;
+  console.log(`Starting to process ${counter.total} entries.`);
 
   /* Let's add new separate columns for street names and numbers */
   let processed = processCSV(data);
@@ -91,9 +127,13 @@ function main(data) {
       console.log(`Processed ${processed.length} entries. Found ${counter.missed} errors.`);
       /*Write to disk*/
       writeCSVFile(processed);
-    });
-}
 
+      if (config.outputGeoJSON) {
+        writeGeoJSON(processed);
+      }
+    })
+    .catch(console.log);
+}
 
 function processCSV(data) {
 
@@ -213,6 +253,7 @@ function refineNumber(number) {
 function logInfo() {
   console.log(`Processed ${counter.missed + counter.success} entries`);
 }
+
 
 //Start reading the file and initiate the process
 readCSVFile(config.fileName, ';');
